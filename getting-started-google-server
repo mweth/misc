@@ -1,0 +1,139 @@
+This is a step-by-step beginner's guide to setting up a server and installing Ubuntu on Google Cloud. I will assume you have no prior knowledge or experience in this area, and I will guide you through each step to help you successfully create a server running Ubuntu on Google Cloud.
+
+Step 1: Sign up for Google Cloud
+
+    Visit the Google Cloud website at https://cloud.google.com/.
+    Click on the "Get started for free" button.
+    If you already have a Google account, sign in. If not, create a new Google account.
+    Fill in the required details, such as your name, address, and credit card information. Google offers a free trial with $300 in credit for new users. Your credit card will not be charged unless you manually upgrade to a paid account.
+
+Step 2: Create a new project
+
+    After signing up, you'll be redirected to the Google Cloud Console (https://console.cloud.google.com/).
+    In the top navigation bar, click on the project dropdown menu and then click on the "New Project" button.
+    Give your project a name and click on the "Create" button.
+
+Step 3: Enable the Compute Engine API
+
+    In the Google Cloud Console, click on the hamburger menu (three horizontal lines) in the top left corner.
+    Click on "APIs & Services" and then "Dashboard."
+    Click on the "Enable APIs and Services" button at the top of the page.
+    Search for "Compute Engine API" in the search bar.
+    Click on the "Compute Engine API" result, and then click on the "Enable" button.
+
+Step 4: Create a virtual machine instance
+
+    In the Google Cloud Console, click on the hamburger menu in the top left corner.
+    Click on "Compute Engine" and then "VM instances."
+    Click on the "Create" button to create a new virtual machine instance.
+    Fill in the following details:
+        Name: Give your instance a name.
+        Region and Zone: Select a region and zone for your instance. It's generally best to choose a location close to your target audience to reduce latency.
+        Machine Configuration:
+            Machine family: Choose "General-purpose."
+            Series: Choose "N1."
+            Machine type: Select a machine type based on your needs. For a basic server, "n1-standard-1" should suffice.
+        Boot disk: Click on "Change" to select an operating system.
+            In the "Operating System" tab, choose "Ubuntu."
+            In the "Version" tab, choose the latest LTS (Long Term Support) version, such as "Ubuntu 20.04 LTS."
+            Click on the "Select" button to confirm your choice.
+        Firewall: Check the boxes for "Allow HTTP traffic" and "Allow HTTPS traffic" if you plan to host a website on this server.
+    Click on the "Create" button at the bottom of the page to create your virtual machine instance.
+
+Step 5: Connect to your virtual machine
+
+    Once your virtual machine is created, you'll see it listed under "VM instances."
+    Click on the "SSH" button next to your instance to open a new browser window with an SSH connection to your virtual machine.
+    You are now connected to your virtual machine running Ubuntu on Google Cloud.
+
+Step 6: Update and upgrade your system
+
+    In the SSH window, run the following command to update the package list:
+
+sql
+
+sudo apt-get update
+
+    Next, run this command to upgrade installed packages to their latest versions:
+
+arduino
+
+sudo apt-get upgrade
+
+Youhave now successfully set up a server and installed Ubuntu on Google Cloud. Your server is now ready for further configuration and software installations based on your specific needs.
+
+Step 7: Basic security configuration (optional)
+
+    It's recommended to create a new user for daily tasks and disable the root user login:
+
+sudo adduser newuser
+
+Replace "newuser" with your desired username. You will be prompted to enter a password and some optional user information.
+
+    Grant administrative privileges to the new user:
+
+sudo usermod -aG sudo newuser
+
+    Test the new user by switching to the new account:
+
+su - newuser
+
+Enter the password when prompted.
+
+    Update the SSH configuration to disable root login. Open the SSH configuration file using a text editor such as nano:
+
+bash
+
+sudo nano /etc/ssh/sshd_config
+
+    Find the line that says:
+
+bash
+
+#PermitRootLogin prohibit-password
+
+Uncomment the line by removing the '#' at the beginning and change "prohibit-password" to "no":
+
+perl
+
+PermitRootLogin no
+
+    Save the file and exit the text editor (in nano, press 'Ctrl' + 'X', then 'Y', then 'Enter').
+
+    Restart the SSH service to apply the changes:
+
+sudo systemctl restart ssh
+
+Step 8: Set up a basic firewall (optional)
+
+    Install the Uncomplicated Firewall (UFW) package:
+
+arduino
+
+sudo apt-get install ufw
+
+    Configure the firewall to allow necessary connections:
+
+sudo ufw allow ssh
+sudo ufw allow http
+sudo ufw allow https
+
+    Enable the firewall:
+
+bash
+
+sudo ufw enable
+
+    Check the firewall status:
+
+lua
+
+sudo ufw status
+
+Your server now has a basic security configuration in place.
+
+Step 9: Install additional software (optional)
+
+Depending on your needs, you may want to install additional software, such as web servers (e.g., Apache or Nginx), databases (e.g., MySQL or PostgreSQL), or programming languages (e.g., PHP, Python, or Node.js). Consult the official documentation for each software package for detailed installation instructions.
+
+Congratulations! You have set up a server running Ubuntu on Google Cloud and performed some basic security configurations. Your server is now ready for you to customize and use as needed.
