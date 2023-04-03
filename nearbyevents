@@ -1,0 +1,351 @@
+\\\\\\\\
+This is a script that searches for kid-friendly events happening on the next two weekends near a specific location, filters and prioritizes the events, and adds them to your Google Calendar. The script uses the Google Custom Search, Google Maps Geocoding, and OpenAI GPT-3 API to achieve this.
+
+Here's a high-level overview of what the script does:
+
+    Define API keys, custom search engine ID, location, and other constants.
+    Define functions for getting the next two weekend days, searching for events, getting location coordinates, checking if an event is nearby, evaluating whether an event is kid-friendly and happening on the next weekend, parsing event details, checking if an event is a duplicate, getting existing events, and adding an event to the calendar.
+    Get the next two weekend days and search for kid-friendly events and festivals on those days.
+    Get the coordinates of your location, Piedmont Park, and Virginia Highland.
+    Get existing events from your Google Calendar.
+    Loop through the events, and for each event:
+        Parse event details.
+        Check if the event is nearby and kid-friendly.
+        Check if the event occurs within a specific time range (9 AM to 7 PM).
+        Check if the event is not a duplicate in your calendar.
+        If all conditions are met, add the event to a list of filtered events.
+    Sort the filtered events by distance to Piedmont Park and Virginia Highland.
+    Add the sorted events to your Google Calendar.
+
+Before running the script, you need to replace the placeholders with your API keys, custom search engine ID, Google Calendar API key file, and any other required details noted below in ALL CAPS.
+
+Free to use.  Created within a few hours using GPT-4.
+\\\\\\\\\\\\\\\\\\\\\\\\\
+
+
+
+import requests
+import datetime
+import pytz
+import openai
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from geopy.distance import geodesic
+from bs4 import BeautifulSoup
+import re
+
+# Replace with your own API keys and custom search engine ID
+GOOGLE_API_KEY = 'your_google_api_key'
+GOOGLE_MAPS_API_KEY = 'your_google_maps_api_key'
+CUSTOM_SEARCH_ENGINE_ID = 'your_custom_search_engine_id'
+OPENAI_API_KEY = 'your_openai_api_key'
+
+# Replace with your own Google Calendar API key file
+GOOGLE_CALENDAR_API_KEY_FILE = 'your_google_calendar_api_key_file.json'
+
+# Google Calendar settings
+CALENDAR_ID = 'primary'
+
+# Set OpenAI API key
+openai.api_key = OPENAI_API_KEY
+
+# Your location
+YOUR_LOCATION = "ADDRESS"
+
+# Locations of interest
+YOUR LOCATIONS
+
+# Get the next two Saturday or Sunday dates
+def get_next_two_weekend_days():
+    today = datetime.date.today()
+    days_to_weekend = (5 - today.weekday()) % 7
+    next_weekend_day1 = today + datetime.timedelta(days=days_to_weekend)
+    next_weekend_day2 = next_weekend_day1 + datetime.timedelta(days=7)
+    return next_weekend_day1, next_weekend_day2
+
+def search_events(query):
+    try:
+        url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={GOOGLE_API_KEY}&cx={CUSTOM_SEARCH_ENGINE_ID}"
+        response = requests.get(url)
+        results = response.json()
+        return results['items']
+    except Exception as e:
+        print(f"Error searching events: {e}")
+        return []
+
+def get_location_coordinates(address):
+    try:
+        url = f"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={GOOGLE_MAPS_API_KEY}"
+        response = requests.get(url)
+        coordinates = response.json()['results'][0]['geometry']['location']
+        return coordinates['lat'], coordinates['lng']
+    except Exception as e:
+        print(f"Error getting location coordinates: {e}")
+        return None
+
+def is_event_nearby(event_location, your_location_coords):
+    event_coords = get_location_coordinates(event_location)
+    if event_coords is None:
+        return False
+
+    distance = geodesic(event_coords, your_location_coords).miles
+    return distance <= 5
+
+def is_event_kid_friendly_and_this_weekend(event_description, next_weekend_day):
+    prompt = f"Is the following event suitable for a family with one or more children and happening on {next_weekend_day.strftime('%Y-%m-%d')}?\n\n{event_description}\n"
+
+    try:
+        response = openai.Completion.create(
+            engine="text-davinci-002",
+            prompt=prompt,
+            max_tokens=50,  # Increase max tokens
+            n=1,
+            stop=None,
+            temperature=0.5,
+        )
+
+        answer = response.choices[0].text.strip()
+        return answer.lower() == 'yes'
+    except Exception as e:
+        print(f"Error evaluating event with OpenAI: {e}")
+        return False
+
+def parse_event_details(event):
+    try:
+        event_url = event['link']
+        response = requests.get(event_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Method 1 for parsing event details
+        title1 = soup.find('h1', class_='event-title')
+        address1 = soup.find('div', class_='event-address')
+        date1 = soup.find('div', class_='event-date')
+
+        # Method 2 for parsing event details
+        title2 = soup.find('h2', class_='event-title')
+        address2 = soup.find('p', class_='event-location')
+        date2 = soup.find('p', class_='event-date')
+
+        # Choose the method that successfully extracts event details
+        if title1 and address1 and date1:
+            title = title1.text.strip()
+            address = address1.text.strip()
+            date = date1.text.strip()
+        elif title2 and address2 and date2:
+            title = title2.text.strip()
+            address = address2.text.strip()
+            date = date2.text.strip()
+        else:
+            return None
+
+        start_time = datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+        end_time = start_time + datetime.timedelta(hours=2)  # Assuming a default duration of 2 hours
+
+        event_details = {
+            'title': title,
+            'formatted_address': address,
+            'start_time': start_time,
+            'end_time': end_time,
+        }
+        return event_details
+    except Exception as e:
+        print(f"Error parsing event details: {e}")
+        return None
+
+def is_duplicate_event(event, existing_events):
+    for existing_event in existing_events:
+        if event['title'] == existing_event['summary'] and event['formatted_address'] == existing_event['location']:
+            return True
+    return False
+
+def get_existing_events():
+    try:
+        credentials = service_account.Credentials.from_service_account_file(GOOGLE_CALENDAR_API_KEY_FILE, scopes=['https://www.googleapis.com/auth/calendar'])
+        service = build('calendar', 'v3', credentials=credentials)
+        now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+        events_result = service.events().list(calendarId=CALENDAR_ID, timeMin=now, maxResults=2500, singleEvents=True, orderBy='startTime').execute()
+        return events_result.get('items', [])
+    except Exception as e:
+        print(f"Error getting existing events: {e}")
+        return []
+
+def add_event_to_calendar(event):
+    try:
+        credentials = service_account.Credentials.from_service_account_file(GOOGLE_CALENDAR_API_KEY_FILE, scopes=['https://www.googleapis.com/auth/calendar'])
+        service = build('calendar', 'v3', credentials=credentials)
+        event = {
+            'summary': event['title'],
+            'location': event['formatted_address'],
+            'start': {
+                'dateTime': event['start_time'].isoformat(),
+                'timeZone': 'America/New_York',
+            },
+            'end': {
+                'dateTime': event['end_time'].isoformat(),
+                'timeZone': 'America/New_York',
+            },
+        }
+
+        created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
+        print(f"Added event
+        print(f"Added event {event['summary']} to the calendar")
+    except Exception as e:
+        print(f"Error adding event to calendar: {e}")
+
+next_weekend_day1, next_weekend_day2 = get_next_two_weekend_days()
+query1 = f"kid-friendly events and festivals on {next_weekend_day1.strftime('%Y-%m-%d')}"
+query2 = f"kid-friendly events and festivals on {next_weekend_day2.strftime('%Y-%m-%d')}"
+events1 = search_events(query1)
+events2 = search_events(query2)
+
+your_location_coords = get_location_coordinates(YOUR_LOCATION)
+piedmont_park_coords = get_location_coordinates(PIEDMONT_PARK)
+virginia_highland_coords = get_location_coordinates(VIRGINIA_HIGHLAND)
+
+existing_events = get_existing_events()
+
+filtered_events = []
+event_count = 0
+
+for event in events1 + events2:
+    if event_count >= 10:
+        break
+
+    event_details = parse_event_details(event)
+    if event_details is None:
+        continue
+
+    event_location = event_details['formatted_address']
+    event_description = event['snippet']
+
+    if is_event_nearby(event_location, your_location_coords) and is_event_kid_friendly_and_this_weekend(event_description, next_weekend_day):
+        event_start_hour = event_details['start_time'].hour
+        event_end_hour = event_details['end_time'].hour
+
+        if 9 <= event_start_hour <= 19 and 9 <= event_end_hour <= 19:
+            if not is_duplicate_event(event_details, existing_events):
+                filtered_events.append(event_details)
+                event_count += 1
+
+# Sort events by priority
+filtered_events.sort(key=lambda e: geodesic(get_location_coordinates(e['formatted_address']), piedmont_park_coords).miles)
+filtered_events.sort(key=lambda e: geodesic(get_location_coordinates(e['formatted_address']), virginia_highland_coords).miles)
+
+for event in filtered_events:
+    add_event_to_calendar(event)
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
+You can modify the script to update an existing WordPress page using the WordPress REST API. 
+First, you need to install the requests package to make HTTP requests, and python-dotenv to manage your environment variables. 
+You can install them with the following command:
+
+bash
+
+pip install requests python-dotenv
+
+Next, create a .env file in your project folder and add the following variables:
+
+makefile
+
+WORDPRESS_SITE_URL=https://yourwordpresssite.com
+WORDPRESS_USERNAME=yourwordpressusername
+WORDPRESS_PASSWORD=yourwordpresspassword
+
+Now, you can modify the script as follows:
+
+python
+
+import os
+from dotenv import load_dotenv
+import requests
+import datetime
+import pytz
+import openai
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from geopy.distance import geodesic
+from bs4 import BeautifulSoup
+import re
+
+# Load environment variables
+load_dotenv()
+
+# Replace with your own API keys and custom search engine ID
+GOOGLE_API_KEY = 'your_google_api_key'
+GOOGLE_MAPS_API_KEY = 'your_google_maps_api_key'
+CUSTOM_SEARCH_ENGINE_ID = 'your_custom_search_engine_id'
+OPENAI_API_KEY = 'your_openai_api_key'
+
+# Replace with your own Google Calendar API key file
+GOOGLE_CALENDAR_API_KEY_FILE = 'your_google_calendar_api_key_file.json'
+
+# Calendar settings
+CALENDAR_ID = 'primary'
+
+# Set OpenAI API key
+openai.api_key = OPENAI_API_KEY
+
+# Your location
+YOUR_LOCATION = "REPLACE WITH ADDRESS"
+
+# Locations of interest
+//Add locations of interest
+
+# Add your WordPress credentials
+WORDPRESS_SITE_URL = os.getenv("WORDPRESS_SITE_URL")
+WORDPRESS_USERNAME = os.getenv("WORDPRESS_USERNAME")
+WORDPRESS_PASSWORD = os.getenv("WORDPRESS_PASSWORD")
+
+# ...
+
+# Add the existing code to fetch and filter events here
+
+# ...
+
+def update_wordpress_page(events):
+    try:
+        # Replace with the ID of the WordPress page you want to update
+        page_id = 'your_page_id'
+
+        # Prepare the content for the WordPress page
+        content = "<h2>Upcoming Kid-Friendly Events</h2>"
+        for event in events:
+            content += f"""
+            <h3>{event['title']}</h3>
+            <p><strong>Location:</strong> {event['formatted_address']}</p>
+            <p><strong>Date:</strong> {event['start_time'].strftime('%Y-%m-%d')}</p>
+            <p><strong>Time:</strong> {event['start_time'].strftime('%H:%M:%S')} - {event['end_time'].strftime('%H:%M:%S')}</p>
+            <hr>
+            """
+
+        # Update the WordPress page using the REST API
+        url = f"{WORDPRESS_SITE_URL}/wp-json/wp/v2/pages/{page_id}"
+        headers = {
+            'Authorization': f"Basic {base64.b64encode(f'{WORDPRESS_USERNAME}:{WORDPRESS_PASSWORD}'.encode('utf-8')).decode('utf-8')}",
+            'Content-Type': 'application/json',
+        }
+        data = {
+            'content': content,
+        }
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            print("WordPress page updated successfully")
+        else:
+            print(f"Error updating WordPress page: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Error updating WordPress page: {e}")
+...
+Sort events by priority
+
+filtered_events.sort(key=lambda e: geodesic(get_location_coordinates(e['formatted_address']), piedmont_park_coords).miles)
+filtered_events.sort(key=lambda e: geodesic(get_location_coordinates(e['formatted_address']), virginia_highland_coords).miles)
+Update the WordPress page with the filtered events
+
+update_wordpress_page(filtered_events)
+
+/////////////////////////////
+This script will now update an existing WordPress page with the filtered events instead of creating a calendar event. You'll need to replace `your_page_id` with the ID of the WordPress page you want to update.
+
+		
